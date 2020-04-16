@@ -47,7 +47,19 @@ let heroDetailHandler (name:string) =
         Seq.tryFind (fun hero -> hero.Name = name) |>
         Option.map json |>
         Option.defaultValue (setStatusCode 404 >=> text "Nope")
-         
+
+let heroSearchByName (name:string) =         
+        System.Threading.Thread.Sleep (if name.Length = 2 then 10000 else 0)
+        heroes.Rows |>
+        Seq.map toHero |>
+        Seq.filter (fun hero -> hero.Name.Contains(name)) |>
+        Seq.truncate 5 |> 
+        Seq.toList |>
+        function
+            | [] -> setStatusCode 404 >=> text "Nope"
+            | r -> json r
+        
+
 //----------------------------------
 // Default template code
 // ---------------------------------
@@ -97,6 +109,7 @@ let indexHandler (name : string) =
     htmlView view
 
 
+
 let webApp =
     choose [
         GET >=>
@@ -104,6 +117,7 @@ let webApp =
                 route "/" >=> indexHandler "world"
                 routeCif "/hello/%s" indexHandler
                 routeCif "/api/hero/%s" heroDetailHandler
+                routeCif "/api/searchByName/%s" heroSearchByName
             ]
         setStatusCode 404 >=> text "Not Found" ]
 
