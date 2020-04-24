@@ -5,9 +5,8 @@ open Thoth.Json
 open Browser.Dom
 open Thoth.Fetch
 open System
-
-// Mutable variable to count the number of times we clicked the button
-let mutable count = 0
+open FSharp.Control
+open Fable.Reaction
 
 // Get a reference to our button and cast the Element to an HTMLButtonElement
 let myButton = document.querySelector(".my-button") :?> Browser.Types.HTMLButtonElement
@@ -32,21 +31,35 @@ let getHeroByName (id : string) : JS.Promise<Hero> =
         return! Fetch.get(url, caseStrategy = CamelCase)
     }
 
+let ofPromise (pr: Fable.Core.JS.Promise<_>) =
+        AsyncRx.ofAsyncWorker(fun obv _ -> async {
+            try
+                let! result = Async.AwaitPromise pr
+                do! obv.OnNextAsync result
+                do! obv.OnCompletedAsync ()
+            with
+            | ex ->
+                do! obv.OnErrorAsync ex
+        })
+
 let searchHeroByName (query: string) : JS.Promise<Hero list> =
     promise {
         let url = sprintf "https://localhost:5001/api/searchByName/%s" query
         return! Fetch.get(url, caseStrategy = CamelCase)
     }
 
-input.oninput <- fun e ->
-    let resultDiv = document.querySelector("#hero-detail") :?> Browser.Types.HTMLDivElement
+let resultDiv = document.querySelector("#hero-detail") :?> Browser.Types.HTMLDivElement
 
-    promise {
-        let! hero = searchHeroByName input.value
-        resultDiv.innerText <- sprintf "%A" hero
-    }
-    |> Promise.catchEnd (fun _ -> resultDiv.innerText <- "Error")
+let test =
+    AsyncRx.ofEvent "oninput" 
+    |> AsyncRx.debounce 300
+    |> AsyncRx.distinctUntilChanged
+    |> AsyncRx.flatMap (searchHeroByName >> ofPromise)
 
+let observer  = AsyncObserver.Create (fun notif -> async { resultDiv.innerText <- sprintf "%A" notif }) 
+
+test.RunAsync observer |> ignore
+    
 // Register our listener
 myButton.onclick <- fun _ ->
     let input = document.querySelector("#name") :?> Browser.Types.HTMLInputElement
@@ -57,7 +70,3 @@ myButton.onclick <- fun _ ->
         resultDiv.innerText <- sprintf "%A" hero
     }
     |> Promise.catchEnd (fun _ -> resultDiv.innerText <- "Error")
-    
-   // |> Promise.eitherEnd (fun r ->
-   //  myButton.innerText <- sprintf "You clicked: %s time(s)" r.Name) (fun _ -> myButton.innerText <- "Error" )
-
